@@ -274,7 +274,10 @@
     <p style="margin:-6px 0 14px;font-size:13px;color:var(--muted)">Halte die Kamera auf den Listen-Code der Kolleg:in.</p>
     <div id="scanView" style="width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:240px"></div>
     <div id="scanStatus" style="margin-top:10px;font-size:13px;color:var(--muted);text-align:center"></div>
-    <div class="sheet-actions"><button class="btn btn-ghost" id="scanClose">Schließen</button></div>
+    <div class="sheet-actions">
+      <button class="btn btn-primary" id="scanRetry" hidden>Erneut versuchen</button>
+      <button class="btn btn-ghost" id="scanClose">Schließen</button>
+    </div>
   </div>
 </div>
 
@@ -2931,17 +2934,44 @@ $("#qrClose").addEventListener("click",()=>$("#qrScrim").classList.remove("open"
 $("#qrScrim").addEventListener("click",e=>{if(e.target===$("#qrScrim"))$("#qrScrim").classList.remove("open");});
 
 let scanner=null;
+function camErrorText(err){
+  const n=(err&&(err.name||err.message||(""+err)))||"";
+  if(/NotAllowed|Permission|Denied/i.test(n)) return "Kamerazugriff wurde abgelehnt. Bitte für diese Seite die Kamera erlauben (Schloss-Symbol in der Adressleiste bzw. in den Einstellungen) und erneut versuchen.";
+  if(/NotFound|DevicesNotFound|Overconstrained/i.test(n)) return "Es wurde keine passende Kamera gefunden.";
+  if(/NotReadable|TrackStart|InUse/i.test(n)) return "Die Kamera ist gerade durch eine andere App belegt. Bitte andere Kamera-Apps schließen und erneut versuchen.";
+  if(/Secure|getUserMedia|NotSupported/i.test(n)) return "Der Kamerazugriff ist hier nicht möglich. Bitte die App über die gehostete HTTPS-Adresse öffnen.";
+  return "Kamera konnte nicht gestartet werden ("+(n||"unbekannt")+"). Bitte erneut versuchen.";
+}
+function scanFail(err){$("#scanStatus").textContent=camErrorText(err);$("#scanRetry").hidden=false;}
+function scanCfg(){return {fps:10,qrbox:function(w,h){const m=Math.floor(Math.min(w,h)*0.72);return {width:m,height:m};}};}
+function startScan(){
+  if(typeof Html5Qrcode==="undefined"){$("#scanStatus").textContent="Scanner konnte nicht geladen werden.";$("#scanRetry").hidden=false;return;}
+  $("#scanStatus").textContent="Kamera wird gestartet …";
+  $("#scanRetry").hidden=true;
+  $("#scanView").innerHTML="";
+  scanner=new Html5Qrcode("scanView");
+  const cfg=scanCfg();
+  scanner.start({facingMode:{ideal:"environment"}},cfg,onScanSuccess,function(){})
+    .then(()=>{$("#scanStatus").textContent="";})
+    .catch(err=>{
+      if(Html5Qrcode.getCameras){
+        Html5Qrcode.getCameras().then(cams=>{
+          if(!cams||!cams.length){scanFail(err);return;}
+          const back=cams.filter(c=>/back|rear|environment|rück/i.test(c.label||""));
+          const id=(back[0]||cams[cams.length-1]).id;
+          scanner.start(id,cfg,onScanSuccess,function(){}).then(()=>{$("#scanStatus").textContent="";}).catch(e=>scanFail(e));
+        }).catch(()=>scanFail(err));
+      } else scanFail(err);
+    });
+}
 function openScan(){
   $("#menuScrim").classList.remove("open");
-  $("#scanStatus").textContent="";
-  const secure=location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1";
-  if(!secure){$("#scanView").innerHTML='<div style="color:#fff;font-size:13px;text-align:center;padding:28px 16px">Der Kamerazugriff funktioniert nur über eine sichere Verbindung (HTTPS).<br>Bitte die App über die gehostete Adresse öffnen.</div>';$("#scanScrim").classList.add("open");return;}
-  if(typeof Html5Qrcode==="undefined"){$("#scanView").innerHTML="";$("#scanStatus").textContent="Scanner konnte nicht geladen werden.";$("#scanScrim").classList.add("open");return;}
-  $("#scanView").innerHTML="";
+  $("#scanStatus").textContent="";$("#scanRetry").hidden=true;
   $("#scanScrim").classList.add("open");
-  scanner=new Html5Qrcode("scanView");
-  const cfg={fps:10,qrbox:function(w,h){const m=Math.floor(Math.min(w,h)*0.72);return {width:m,height:m};}};
-  scanner.start({facingMode:"environment"},cfg,onScanSuccess,function(){}).catch(()=>{$("#scanStatus").textContent="Kamera nicht verfügbar oder Zugriff abgelehnt.";});
+  const secure=location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1";
+  if(!secure){$("#scanView").innerHTML='<div style="color:#fff;font-size:13px;text-align:center;padding:28px 16px">Der Kamerazugriff funktioniert nur über eine sichere Verbindung (HTTPS).<br>Bitte die App über die gehostete Adresse öffnen.</div>';return;}
+  $("#scanView").innerHTML="";
+  startScan();
 }
 function onScanSuccess(decoded){
   stopScan();$("#scanScrim").classList.remove("open");
@@ -2953,6 +2983,7 @@ function stopScan(){if(scanner){const s=scanner;scanner=null;try{s.stop().then((
 function closeScan(){stopScan();$("#scanScrim").classList.remove("open");}
 $("#scanBtn").addEventListener("click",openScan);
 $("#scanClose").addEventListener("click",closeScan);
+$("#scanRetry").addEventListener("click",()=>{stopScan();startScan();});
 $("#scanScrim").addEventListener("click",e=>{if(e.target===$("#scanScrim"))closeScan();});
 
 let tt;function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(tt);tt=setTimeout(()=>t.classList.remove("show"),2200);}
