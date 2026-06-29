@@ -16,7 +16,7 @@
     --bg:#F2F4F3; --surface:#FFFFFF; --ink:#15201E; --muted:#5C6B68; --line:#E3E8E6;
     --accent:#0F6E63; --accent-ink:#FFFFFF; --accent-soft:#E2F0ED;
     --unit:#9A5B2B; --unit-soft:#F3E9DF;
-    --danger:#B4452F;
+    --danger:#B4452F; --danger-soft:#F7E9E5; --danger-line:#ECD3CC;
     --radius:14px; --shadow:0 1px 2px rgba(21,32,30,.05), 0 8px 24px rgba(21,32,30,.06);
   }
   *{box-sizing:border-box}
@@ -74,6 +74,17 @@
     border-radius:10px;background:var(--accent);color:var(--accent-ink);text-decoration:none}
   .call:active{filter:brightness(.94)}
   .nonum{padding:10px 12px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+
+  .emg{margin-top:12px;border:1px solid var(--danger-line);background:var(--danger-soft);border-radius:12px;padding:8px 10px}
+  .emg-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+  .emg-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--danger)}
+  .emg-edit{appearance:none;border:none;background:none;color:var(--danger);font:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:2px}
+  .emg-row{display:flex;align-items:center;gap:10px;padding:5px 2px}
+  .emg-row .el{flex:1 1 auto;min-width:0;font-size:14px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .emg-row .en{flex:0 0 auto;font-family:ui-monospace,"SF Mono","Roboto Mono",Menlo,monospace;font-variant-numeric:tabular-nums;font-size:15px;font-weight:600;color:var(--ink)}
+  .emg-call{flex:0 0 auto;width:34px;height:34px;border-radius:9px;background:var(--danger);color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none}
+  .emg-call:active{filter:brightness(.94)}
+  .emg-empty-ghost{appearance:none;border:1px dashed var(--line);background:none;color:var(--muted);font:inherit;font-size:13px;font-weight:560;padding:9px;border-radius:10px;cursor:pointer;width:100%;margin-top:12px}
 
   .empty{text-align:center;color:var(--muted);padding:46px 20px;border:1px dashed var(--line);
     border-radius:var(--radius);margin-top:4px;background:var(--surface)}
@@ -135,6 +146,7 @@
       <div class="brand"><span class="dot"></span><h1>Durchwahl</h1></div>
       <button class="menu-btn" id="menuBtn">Teilen / Mehr</button>
     </div>
+    <div id="emergency"></div>
     <div class="search">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
       <input id="search" type="search" inputmode="search" placeholder="Suchen..." autocomplete="off">
@@ -192,6 +204,20 @@
   </div>
 </div>
 
+<!-- Emergency editor -->
+<div class="scrim" id="emgScrim">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h2>Notfallnummern</h2>
+    <p style="margin:-6px 0 14px;font-size:13px;color:var(--muted)">Diese Nummern stehen immer ganz oben.</p>
+    <div id="emg_numbers"></div>
+    <button class="addnum" id="addEmg">+ Nummer hinzufügen</button>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="emgCancel">Abbrechen</button>
+      <button class="btn btn-primary" id="emgSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- Menu -->
 <div class="scrim" id="menuScrim">
   <div class="sheet" role="dialog" aria-modal="true">
@@ -234,15 +260,15 @@ let tab="people";
 function load(){
   try{
     const raw=localStorage.getItem(KEY);
-    if(raw){const o=JSON.parse(raw);return {people:o.people||[],units:o.units||[]};}
+    if(raw){const o=JSON.parse(raw);return {people:o.people||[],units:o.units||[],emergency:o.emergency||[]};}
     const old=localStorage.getItem("durchwahlliste.v1");
     if(old){
       const arr=JSON.parse(old);
       const people=(Array.isArray(arr)?arr:[]).map(c=>({id:uid(),title:"",first:"",last:c.name||"",dect:c.ext||"",mobile:"",radio:""}));
-      return {people,units:[]};
+      return {people,units:[],emergency:[]};
     }
   }catch(e){}
-  return {people:[],units:[]};
+  return {people:[],units:[],emergency:[]};
 }
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(store));}
@@ -273,6 +299,7 @@ function callRow(label,number){
 }
 
 function render(){
+  renderEmergency();
   const q=$("#search").value.trim().toLowerCase();
   const list=$("#list");
   $("#tabPeople").classList.toggle("active",tab==="people");
@@ -349,9 +376,9 @@ $("#pDelete").addEventListener("click",()=>{
   });
 });
 
-function numRowEl(label,number){
+function numRowEl(label,number,ph){
   const div=document.createElement("div");div.className="numedit";
-  div.innerHTML='<input class="lbl" type="text" placeholder="Label (z. B. Pflege)" value="'+esc(label||"")+'">'
+  div.innerHTML='<input class="lbl" type="text" placeholder="'+esc(ph||"Label (z. B. Pflege)")+'" value="'+esc(label||"")+'">'
     +'<input class="val" type="tel" inputmode="tel" placeholder="Nummer" value="'+esc(number||"")+'">'
     +'<button class="rm" type="button" aria-label="Entfernen">x</button>';
   div.querySelector(".rm").addEventListener("click",()=>div.remove());
@@ -392,6 +419,37 @@ $("#uDelete").addEventListener("click",()=>{
   });
 });
 
+function emgRow(e){
+  return '<div class="emg-row"><span class="el">'+esc(e.label||"Notruf")+'</span>'
+    +'<span class="en">'+esc(e.number)+'</span>'
+    +'<a class="emg-call" href="tel:'+encodeURIComponent(e.number)+'" aria-label="'+esc(e.label||"Notruf")+' anrufen"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M20 15.5c-1.25 0-2.45-.2-3.57-.57a1 1 0 0 0-1.02.24l-2.2 2.2a15.05 15.05 0 0 1-6.59-6.59l2.2-2.2a1 1 0 0 0 .25-1.02A11.36 11.36 0 0 1 8.5 4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1 17 17 0 0 0 17 17 1 1 0 0 0 1-1v-3.5a1 1 0 0 0-1-1z"/></svg></a></div>';
+}
+function renderEmergency(){
+  const box=$("#emergency");
+  if(!store.emergency.length){
+    box.className="";box.innerHTML='<button class="emg-empty-ghost" id="emgAdd0">+ Notfallnummer hinzufügen</button>';
+    $("#emgAdd0").addEventListener("click",openEmergency);return;
+  }
+  box.className="emg";
+  box.innerHTML='<div class="emg-head"><span class="emg-title">Notfall</span><button class="emg-edit" id="emgEdit">Bearbeiten</button></div>'+store.emergency.map(emgRow).join("");
+  $("#emgEdit").addEventListener("click",openEmergency);
+}
+function openEmergency(){
+  const box=$("#emg_numbers");box.innerHTML="";
+  const rows=store.emergency.length?store.emergency:[{label:"",number:""}];
+  rows.forEach(r=>box.appendChild(numRowEl(r.label,r.number,"Bezeichnung (z. B. Notaufnahme)")));
+  $("#emgScrim").classList.add("open");
+  setTimeout(()=>{const f=box.querySelector("input");if(f)f.focus();},60);
+}
+$("#addEmg").addEventListener("click",()=>$("#emg_numbers").appendChild(numRowEl("","","Bezeichnung (z. B. Notaufnahme)")));
+$("#emgCancel").addEventListener("click",()=>$("#emgScrim").classList.remove("open"));
+$("#emgScrim").addEventListener("click",e=>{if(e.target===$("#emgScrim"))$("#emgScrim").classList.remove("open");});
+$("#emgSave").addEventListener("click",()=>{
+  const rows=[...$("#emg_numbers").querySelectorAll(".numedit")].map(r=>({label:r.querySelector(".lbl").value.trim(),number:r.querySelector(".val").value.trim()})).filter(n=>n.number);
+  store.emergency=rows.map(r=>({id:uid(),label:r.label,number:r.number}));
+  save();renderEmergency();$("#emgScrim").classList.remove("open");toast("Notfallnummern gespeichert.");
+});
+
 let pendingYes=null;
 function askDelete(title,what,onYes){
   $("#confirmTitle").textContent=title;
@@ -407,8 +465,8 @@ $("#menuBtn").addEventListener("click",()=>$("#menuScrim").classList.add("open")
 $("#menuClose").addEventListener("click",()=>$("#menuScrim").classList.remove("open"));
 $("#menuScrim").addEventListener("click",e=>{if(e.target===$("#menuScrim"))$("#menuScrim").classList.remove("open");});
 $("#exportBtn").addEventListener("click",()=>{
-  if(!store.people.length&&!store.units.length){toast("Liste ist leer.");return;}
-  const blob=new Blob([JSON.stringify({type:"durchwahlliste",version:2,people:store.people,units:store.units},null,2)],{type:"application/json"});
+  if(!store.people.length&&!store.units.length&&!store.emergency.length){toast("Liste ist leer.");return;}
+  const blob=new Blob([JSON.stringify({type:"durchwahlliste",version:2,people:store.people,units:store.units,emergency:store.emergency},null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob);const a=document.createElement("a");
   a.href=url;a.download="durchwahlliste.json";a.click();URL.revokeObjectURL(url);
   $("#menuScrim").classList.remove("open");toast("Exportiert - Datei kann jetzt geteilt werden.");
@@ -422,6 +480,7 @@ $("#importFile").addEventListener("change",e=>{
       const o=JSON.parse(r.result);let a=0;
       (o.people||[]).forEach(p=>{if(p&&(p.first||p.last)){const dup=store.people.some(x=>personName(x)===personName(p)&&x.dect===(p.dect||""));if(!dup){store.people.push({id:uid(),title:p.title||"",first:p.first||"",last:p.last||"",dept:p.dept||"",role:p.role||"",dect:p.dect||"",mobile:p.mobile||"",radio:p.radio||""});a++;}}});
       (o.units||[]).forEach(u=>{if(u&&u.name){const dup=store.units.some(x=>x.name===u.name);if(!dup){store.units.push({id:uid(),name:u.name,numbers:(u.numbers||[]).map(n=>({label:n.label||"",number:String(n.number||"")})).filter(n=>n.number)});a++;}}});
+      (o.emergency||[]).forEach(en=>{if(en&&en.number){const dup=store.emergency.some(x=>x.label===(en.label||"")&&x.number===String(en.number));if(!dup){store.emergency.push({id:uid(),label:en.label||"",number:String(en.number)});a++;}}});
       const legacy=Array.isArray(o)?o:o.contacts;
       if(Array.isArray(legacy)) legacy.forEach(c=>{if(c&&c.name){const dup=store.people.some(x=>x.last===c.name&&x.dect===(c.ext||""));if(!dup){store.people.push({id:uid(),title:"",first:"",last:c.name,dect:c.ext||"",mobile:"",radio:""});a++;}}});
       save();render();$("#menuScrim").classList.remove("open");
