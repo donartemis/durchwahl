@@ -2951,7 +2951,7 @@ function startScan(){
   $("#scanView").innerHTML="";
   scanner=new Html5Qrcode("scanView");
   const cfg=scanCfg();
-  scanner.start({facingMode:{ideal:"environment"}},cfg,onScanSuccess,function(){})
+  scanner.start({facingMode:"environment"},cfg,onScanSuccess,function(){})
     .then(()=>{$("#scanStatus").textContent="";})
     .catch(err=>{
       if(Html5Qrcode.getCameras){
