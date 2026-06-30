@@ -2886,8 +2886,9 @@ function importMsg(res,o){
 function importFromEncoded(enc){
   let o=null;
   try{o=JSON.parse(LZString.decompressFromEncodedURIComponent(enc));}catch(e){}
-  if(!o||!(o.people||o.units||o.emergency)){toast("Geteilte Liste konnte nicht gelesen werden.");return;}
-  const np=(o.people||[]).length,nu=(o.units||[]).length,ne=(o.emergency||[]).length;
+  const legacyArr=Array.isArray(o)?o:(o&&Array.isArray(o.contacts)?o.contacts:null);
+  if(!o||!(o.people||o.units||o.emergency||legacyArr)){toast("Geteilte Liste konnte nicht gelesen werden.");return;}
+  const np=(o.people||[]).length+(legacyArr?legacyArr.length:0),nu=(o.units||[]).length,ne=(o.emergency||[]).length;
   const txt="Geteilte Liste mit "+np+" Personen, "+nu+" Stationen"+(ne?", "+ne+" Notfallnummern":"")+". Neue Einträge werden hinzugefügt, vorhandene nur ergänzt.";
   askConfirm("Geteilte Liste übernehmen?",txt,"Übernehmen",()=>{const res=mergeImport(o);save();render();toast(importMsg(res,o));},false);
 }
